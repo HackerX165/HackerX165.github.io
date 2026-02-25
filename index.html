@@ -1,43 +1,180 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>My Private App</title>
+  <meta charset="UTF-8">
+  <title>Live Map & Plane Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link
-rel="stylesheet"
-href="https://unpkg.com/leaflet/dist/leaflet.css"
-/>
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: black;
+      color: white;
+      text-align: center;
+    }
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    h2 {
+      margin: 10px;
+    }
 
-<style>
-body {
-  margin: 0;
-  font-family: Arial;
-}
-h3 {
-  text-align: center;
-}
-#map {
-  height: 90vh;
-}
-</style>
+    #map {
+      height: 85vh;
+      width: 100%;
+    }
+
+    #status {
+      padding: 5px;
+      background: #111;
+      font-size: 14px;
+    }
+  </style>
 </head>
 
 <body>
 
-<h3>My Dashboard</h3>
+<h2>📍 Live Map + ✈️ Plane Tracker</h2>
+
+<div id="status">Loading...</div>
 
 <div id="map"></div>
 
-<script>
-var map = L.map('map').setView([23.02,72.57],10);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
- attribution:'© OpenStreetMap'
-}).addTo(map);
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+  // ===============================
+  // MAP SETUP
+  // ===============================
+
+  var map = L.map('map').setView([20, 0], 2);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+
+  // ===============================
+  // LIVE USER LOCATION
+  // ===============================
+
+  var userMarker = null;
+
+  if ("geolocation" in navigator) {
+
+    navigator.geolocation.watchPosition(
+
+      function(pos) {
+
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+
+        document.getElementById("status").innerHTML =
+          "📍 Your Location: " +
+          lat.toFixed(4) + ", " +
+          lng.toFixed(4);
+
+        map.setView([lat, lng], 14);
+
+        if (userMarker) {
+          map.removeLayer(userMarker);
+        }
+
+        userMarker = L.marker([lat, lng])
+          .addTo(map)
+          .bindPopup("You are here")
+          .openPopup();
+
+      },
+
+      function() {
+        alert("Please enable GPS & Allow Location");
+      },
+
+      {
+        enableHighAccuracy: true
+      }
+
+    );
+
+  } else {
+    alert("GPS not supported");
+  }
+
+
+  // ===============================
+  // PLANE TRACKING
+  // ===============================
+
+  var planeMarkers = [];
+
+  async function loadPlanes() {
+
+    try {
+
+      // Free public proxy (for CORS)
+      var url =
+        "https://api.allorigins.win/raw?url=" +
+        encodeURIComponent("https://opensky-network.org/api/states/all");
+
+      var res = await fetch(url);
+
+      var data = await res.json();
+
+      // Remove old planes
+      planeMarkers.forEach(m => map.removeLayer(m));
+      planeMarkers = [];
+
+      if (!data.states) return;
+
+      data.states.forEach(function(p) {
+
+        var lat = p[6];
+        var lng = p[5];
+        var callsign = p[1];
+
+        if (lat && lng) {
+
+          var planeIcon = L.icon({
+            iconUrl:
+              "https://cdn-icons-png.flaticon.com/512/61/61212.png",
+            iconSize: [25, 25]
+          });
+
+          var marker = L.marker([lat, lng], {
+            icon: planeIcon
+          })
+          .addTo(map)
+          .bindPopup("✈️ " + callsign);
+
+          planeMarkers.push(marker);
+
+        }
+
+      });
+
+    }
+
+    catch (e) {
+      console.log("Plane error", e);
+    }
+
+  }
+
+
+  // Load planes every 15 seconds
+  loadPlanes();
+  setInterval(loadPlanes, 15000);
+
+
 </script>
 
 </body>
