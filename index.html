@@ -2,51 +2,50 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>JARVIS Command Center</title>
+<title>JARVIS AI Ultimate</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet"
- href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
 
-@import url('https://fonts.googleapis.com/css2?family=Orbitron&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
 *{box-sizing:border-box;}
 
 body{
 margin:0;
-background:black;
+background:radial-gradient(circle,#001018,#000);
 font-family:Orbitron,sans-serif;
 color:#00ffff;
 overflow:hidden;
 }
 
-/* Header */
+/* Top */
 #top{
-height:55px;
-background:#000814;
-border-bottom:2px solid cyan;
+height:60px;
+background:#000c18;
 display:flex;
 align-items:center;
 justify-content:center;
-box-shadow:0 0 15px cyan;
+border-bottom:2px solid cyan;
+box-shadow:0 0 25px cyan;
 }
 
-/* Status */
-#status{
-height:35px;
-background:#020c18;
-border-bottom:1px solid cyan;
+/* Console */
+#console{
+height:40px;
+background:#020f1f;
 text-align:center;
+line-height:40px;
+border-bottom:1px solid cyan;
 font-size:13px;
-line-height:35px;
 }
 
 /* Map */
 #map{
-height:calc(100vh - 90px);
-width:100%;
+height:calc(100vh - 100px);
 }
 
 /* HUD */
@@ -55,38 +54,53 @@ position:fixed;
 inset:0;
 pointer-events:none;
 background:
-repeating-linear-gradient(
-0deg,
-rgba(0,255,255,.04),
-rgba(0,255,255,.04) 1px,
-transparent 2px,
-transparent 5px
-);
-animation:scan 4s linear infinite;
+linear-gradient(transparent 96%,rgba(0,255,255,.08)),
+linear-gradient(90deg,transparent 96%,rgba(0,255,255,.08));
+background-size:40px 40px;
+opacity:.4;
 }
 
-@keyframes scan{
-to{background-position:0 120px;}
-}
-
-/* Controls */
-#controls{
+/* AI Core */
+#ai{
 position:fixed;
-bottom:10px;
+top:100px;
+right:15px;
+width:110px;
+height:110px;
+border-radius:50%;
+border:2px solid cyan;
+box-shadow:0 0 30px cyan;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:11px;
+animation:pulse 2s infinite;
+}
+
+@keyframes pulse{
+50%{box-shadow:0 0 60px cyan;}
+}
+
+/* Panel */
+#panel{
+position:fixed;
+bottom:15px;
 left:50%;
 transform:translateX(-50%);
 display:flex;
-gap:10px;
+flex-wrap:wrap;
+gap:8px;
+justify-content:center;
 }
 
 .btn{
 background:black;
 color:cyan;
 border:2px solid cyan;
-padding:8px 14px;
+padding:7px 14px;
 border-radius:20px;
 font-size:11px;
-box-shadow:0 0 10px cyan;
+box-shadow:0 0 12px cyan;
 }
 
 .btn:active{
@@ -94,34 +108,19 @@ background:cyan;
 color:black;
 }
 
-/* Radar */
-#radar{
+/* Compass */
+#compass{
 position:fixed;
-top:80px;
-right:10px;
-width:120px;
-height:120px;
-border:2px solid cyan;
+top:100px;
+left:15px;
+width:80px;
+height:80px;
 border-radius:50%;
-overflow:hidden;
+border:2px solid cyan;
+text-align:center;
+line-height:80px;
+font-size:18px;
 box-shadow:0 0 20px cyan;
-}
-
-#sweep{
-position:absolute;
-width:100%;
-height:100%;
-background:
-conic-gradient(
-from 0deg,
-rgba(0,255,255,.4),
-transparent 60%
-);
-animation:spin 3s linear infinite;
-}
-
-@keyframes spin{
-to{transform:rotate(360deg);}
 }
 
 </style>
@@ -129,18 +128,24 @@ to{transform:rotate(360deg);}
 
 <body>
 
-<div id="top">J.A.R.V.I.S COMMAND CENTER</div>
-<div id="status">Booting system...</div>
+<div id="top">J.A.R.V.I.S AI COMMAND SYSTEM</div>
+<div id="console">Booting AI Core...</div>
 
 <div id="map"></div>
 
-<div id="radar"><div id="sweep"></div></div>
+<div id="ai">AI CORE</div>
+<div id="compass">N</div>
 
-<div id="controls">
-<button class="btn" onclick="centerGPS()">CENTER</button>
+<div id="panel">
+
+<button class="btn" onclick="center()">CENTER</button>
 <button class="btn" onclick="toggleSat()">SAT</button>
-<button class="btn" onclick="speak()">VOICE</button>
+<button class="btn" onclick="listen()">CMD</button>
+<button class="btn" onclick="speak()">TALK</button>
 <button class="btn" onclick="loadPlanes()">PLANES</button>
+<button class="btn" onclick="getWeather()">WEATHER</button>
+<button class="btn" onclick="sos()">SOS</button>
+
 </div>
 
 <div id="hud"></div>
@@ -151,13 +156,16 @@ to{transform:rotate(360deg);}
 
 let map,userMarker,lastPos=null;
 let sat=false;
-let planeMarkers=[];
+let planes=[];
+let heading=0;
+
+const consoleBox=document.getElementById("console");
+const compass=document.getElementById("compass");
 
 // Map
 map=L.map("map",{zoomControl:false})
 .setView([20,0],2);
 
-// Layers
 const normal=L.tileLayer(
 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
 
@@ -167,36 +175,41 @@ const satLayer=L.tileLayer(
 normal.addTo(map);
 
 // Icon
-const userIcon=L.icon({
+const icon=L.icon({
 iconUrl:"https://cdn-icons-png.flaticon.com/512/149/149071.png",
 iconSize:[32,32]
 });
 
-const status=document.getElementById("status");
-
 // Voice
+function say(t){
+let s=new SpeechSynthesisUtterance(t);
+s.rate=1;
+speechSynthesis.speak(s);
+}
+
 function speak(){
-let t=new SpeechSynthesisUtterance(status.innerText);
-speechSynthesis.speak(t);
+say(consoleBox.innerText);
 }
 
 // GPS
-navigator.geolocation.watchPosition(
+navigator.geolocation.watchPosition(p=>{
 
-p=>{
 let lat=p.coords.latitude;
 let lng=p.coords.longitude;
+
 lastPos=[lat,lng];
 
-status.innerText=
-"GPS LOCKED ⚡ "+lat.toFixed(5)+" , "+lng.toFixed(5);
+consoleBox.innerText=
+"GPS ⚡ "+lat.toFixed(5)+" , "+lng.toFixed(5);
 
 if(!userMarker){
 
-userMarker=L.marker([lat,lng],{icon:userIcon})
+userMarker=L.marker([lat,lng],{icon})
 .addTo(map);
 
 map.setView([lat,lng],15);
+
+say("Location locked");
 
 }else{
 
@@ -207,8 +220,8 @@ userMarker.setLatLng([lat,lng]);
 },
 
 e=>{
-status.innerText="GPS ERROR ❌";
-alert("Enable GPS");
+consoleBox.innerText="GPS ERROR";
+say("GPS error");
 },
 
 {enableHighAccuracy:true}
@@ -216,9 +229,11 @@ alert("Enable GPS");
 );
 
 // Center
-function centerGPS(){
-if(lastPos)
-map.setView(lastPos,16,{animate:true});
+function center(){
+if(lastPos){
+map.setView(lastPos,16);
+say("Centered");
+}
 }
 
 // Satellite
@@ -228,12 +243,82 @@ if(!sat){
 map.removeLayer(normal);
 satLayer.addTo(map);
 sat=true;
-status.innerText="Satellite Mode ON 🛰️";
+consoleBox.innerText="Satellite ON";
+say("Satellite enabled");
 }else{
 map.removeLayer(satLayer);
 normal.addTo(map);
 sat=false;
-status.innerText="Map Mode ON 🌍";
+consoleBox.innerText="Map Mode";
+say("Map enabled");
+}
+
+}
+
+// Voice Commands
+function listen(){
+
+const SR=window.SpeechRecognition||
+window.webkitSpeechRecognition;
+
+if(!SR){
+alert("Voice not supported");
+return;
+}
+
+const r=new SR();
+r.lang="en-US";
+r.start();
+
+consoleBox.innerText="Listening...";
+
+r.onresult=e=>{
+
+let cmd=e.results[0][0].transcript
+.toLowerCase();
+
+consoleBox.innerText="CMD: "+cmd;
+
+if(cmd.includes("center")) center();
+if(cmd.includes("satellite")) toggleSat();
+if(cmd.includes("map")) toggleSat();
+if(cmd.includes("weather")) getWeather();
+if(cmd.includes("sos")) sos();
+
+};
+
+}
+
+// Weather (free API)
+async function getWeather(){
+
+if(!lastPos){
+alert("No GPS");
+return;
+}
+
+let lat=lastPos[0];
+let lng=lastPos[1];
+
+try{
+
+let url=
+`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`;
+
+let r=await fetch(url);
+let d=await r.json();
+
+let t=d.current_weather.temperature;
+let w=d.current_weather.windspeed;
+
+let msg=
+"Weather: "+t+"°C | Wind "+w+" km/h";
+
+consoleBox.innerText=msg;
+say(msg);
+
+}catch{
+consoleBox.innerText="Weather error";
 }
 
 }
@@ -241,10 +326,10 @@ status.innerText="Map Mode ON 🌍";
 // Planes
 async function loadPlanes(){
 
-status.innerText="Scanning Airspace ✈️";
+consoleBox.innerText="Scanning planes...";
 
-planeMarkers.forEach(m=>map.removeLayer(m));
-planeMarkers=[];
+planes.forEach(p=>map.removeLayer(p));
+planes=[];
 
 try{
 
@@ -256,30 +341,64 @@ let d=await r.json();
 
 d.states.forEach(p=>{
 
-let lat=p[6],lng=p[5],id=p[1];
+let lat=p[6],lng=p[5];
 
 if(lat&&lng){
 
 let m=L.marker([lat,lng])
 .addTo(map)
-.bindPopup("✈️ "+id);
+.bindPopup("✈️ "+p[1]);
 
-planeMarkers.push(m);
+planes.push(m);
 
 }
 
 });
 
-status.innerText="Airspace Updated ✔️";
+consoleBox.innerText="Airspace updated";
+say("Planes updated");
 
 }catch{
-status.innerText="Plane Data Blocked ❌";
-}
+
+consoleBox.innerText="Plane blocked";
 
 }
 
-// Auto planes refresh
-setInterval(loadPlanes,20000);
+}
+
+setInterval(loadPlanes,25000);
+
+// Compass
+window.addEventListener("deviceorientation",e=>{
+
+if(e.alpha!=null){
+
+heading=Math.round(e.alpha);
+compass.innerText=heading+"°";
+
+}
+
+});
+
+// SOS
+function sos(){
+
+if(!lastPos){
+alert("No GPS");
+return;
+}
+
+let msg=
+"EMERGENCY SOS! Location: "+
+lastPos[0]+","+lastPos[1];
+
+say("Emergency signal activated");
+
+alert(msg);
+
+}
+
+say("Jarvis system online");
 
 </script>
 
